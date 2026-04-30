@@ -13,6 +13,7 @@ import type { YouTubePlayer as YTPlayerType } from "youtube-player/dist/types";
 
 // ─── Types ───────────────────────────────────────────────────────────
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
+type ActiveTab = "watch" | "chat" | "party";
 
 interface SyncPacket {
   action: "PLAY" | "PAUSE" | "SEEK" | "URL_CHANGE";
@@ -20,33 +21,60 @@ interface SyncPacket {
   url?: string;
 }
 
-// ─── Utility: Generate short IDs ─────────────────────────────────────
+// ─── Icon Components ─────────────────────────────────────────────────
+function CopyIcon({ copied }: { copied: boolean }) {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {copied ? (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      ) : (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      )}
+    </svg>
+  );
+}
+
+function WatchIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={`w-7 h-7 transition-all duration-300 ${active ? 'text-red-600 scale-110' : 'text-zinc-600'}`} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+    </svg>
+  );
+}
+
+function ChatIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={`w-7 h-7 transition-all duration-300 ${active ? 'text-red-600 scale-110' : 'text-zinc-600'}`} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+    </svg>
+  );
+}
+
+function PartyIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={`w-7 h-7 transition-all duration-300 ${active ? 'text-red-600 scale-110' : 'text-zinc-600'}`} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+    </svg>
+  );
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────
 function generateShortId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
-  for (let i = 0; i < 6; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `SP-${id}`;
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return `NET-${id}`;
 }
 
-// ─── Utility: Extract YouTube Video ID from URL ──────────────────────
 function extractVideoId(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.hostname.includes("youtube.com")) {
-      if (parsed.pathname.startsWith("/watch")) {
-        return parsed.searchParams.get("v");
-      }
-      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/shorts/")) {
-        return parsed.pathname.split("/")[2];
-      }
+      if (parsed.pathname.startsWith("/watch")) return parsed.searchParams.get("v");
+      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/shorts/")) return parsed.pathname.split("/")[2];
     }
-    if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.slice(1);
-    }
+    if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1);
   } catch (e) {
-    // Fallback to regex if URL parsing fails
     const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
@@ -54,590 +82,325 @@ function extractVideoId(url: string): string | null {
   return null;
 }
 
-// ─── Icon Components ─────────────────────────────────────────────────
-function CopyIcon({ copied }: { copied: boolean }) {
-  if (copied) {
-    return (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-    </svg>
-  );
-}
-
 // ─── Main Component ──────────────────────────────────────────────────
 export default function WatchParty() {
-  // State
-  const [myPeerId, setMyPeerId] = useState<string>("");
-  const [partnerId, setPartnerId] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("watch");
+  const [isMobile, setIsMobile] = useState(false);
+  const [myPeerId, setMyPeerId] = useState("");
+  const [partnerId, setPartnerId] = useState("");
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
-  const [videoUrl, setVideoUrl] = useState<string>(
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  );
-  const [urlInput, setUrlInput] = useState<string>(
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  );
-  const [copied, setCopied] = useState<boolean>(false);
-  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [urlInput, setUrlInput] = useState("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   const [chatMessages, setChatMessages] = useState<{ from: string; text: string }[]>([]);
-  const [chatInput, setChatInput] = useState<string>("");
-  const [errorMsg, setErrorMsg] = useState<string>("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [chatInput, setChatInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [showChat, setShowChat] = useState(true);
 
-  // Refs
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
   const playerRef = useRef<YTPlayerType | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const isSyncingRef = useRef<boolean>(false);
-  const chatEndRef = useRef<HTMLDivElement | null>(0 as unknown as HTMLDivElement); // placeholder for ref
   const lastTimeRef = useRef<number>(0);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll chat to bottom
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
-
-  // ─── Send Sync Packet ──────────────────────────────────────────
-  const sendPacket = useCallback((packet: SyncPacket) => {
-    if (connRef.current && connRef.current.open) {
-      connRef.current.send(packet);
-    }
+    const checkSize = () => setIsMobile(window.innerWidth < 1024);
+    checkSize();
+    window.addEventListener("resize", checkSize);
+    return () => window.removeEventListener("resize", checkSize);
   }, []);
 
-  // ─── Player Instance Manager ──────────────────────────────────
+  const sendPacket = useCallback((packet: SyncPacket) => {
+    if (connRef.current?.open) connRef.current.send(packet);
+  }, []);
+
   const initPlayer = useCallback((videoId: string) => {
     if (!playerContainerRef.current) return;
-
-    // Clean up old player if exists
-    if (playerRef.current) {
-      try {
-        playerRef.current.destroy();
-      } catch (e) {}
-    }
-
-    // Create new player
+    if (playerRef.current) { try { playerRef.current.destroy(); } catch (e) {} }
     const player = YouTubePlayer(playerContainerRef.current, {
-      videoId,
-      width: "100%" as unknown as number,
-      height: "100%" as unknown as number,
-      playerVars: {
-        autoplay: 1,
-        modestbranding: 1,
-        rel: 0,
-        controls: 1,
-        enablejsapi: 1,
-        origin: typeof window !== 'undefined' ? window.location.origin : '',
-      },
+      videoId, width: "100%" as any, height: "100%" as any,
+      playerVars: { autoplay: 1, modestbranding: 1, rel: 0, controls: 1, enablejsapi: 1, origin: typeof window !== 'undefined' ? window.location.origin : '' },
     });
-
     playerRef.current = player;
-
-    // Listen for state changes
     player.on("stateChange", (event: { data: number }) => {
       if (isSyncingRef.current) return;
-      const state = event.data;
-      if (state === 1 || state === 2) {
-        player.getCurrentTime().then((time: number) => {
-          sendPacket({ action: state === 1 ? "PLAY" : "PAUSE", time });
-        });
+      if (event.data === 1 || event.data === 2) {
+        player.getCurrentTime().then(time => sendPacket({ action: event.data === 1 ? "PLAY" : "PAUSE", time }));
       }
     });
-
-    // Handle initial sizing
-    const iframe = playerContainerRef.current.querySelector("iframe");
-    if (iframe) {
-      iframe.style.width = "100%";
-      iframe.style.height = "100%";
-    }
-
-    // Seek detection loop
     if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     syncIntervalRef.current = setInterval(async () => {
       if (isSyncingRef.current || !playerRef.current) return;
       try {
         const currentTime = await player.getCurrentTime();
-        const diff = Math.abs(currentTime - lastTimeRef.current);
-        
-        // If jump is more than 2 seconds, it's likely a manual seek
-        if (diff > 2) {
-          sendPacket({ action: "SEEK", time: currentTime });
-        }
+        if (Math.abs(currentTime - lastTimeRef.current) > 2) sendPacket({ action: "SEEK", time: currentTime });
         lastTimeRef.current = currentTime;
       } catch (e) {}
     }, 500);
   }, [sendPacket]);
 
-  // Initial load
-  useEffect(() => {
-    const initialId = extractVideoId(videoUrl) || "dQw4w9WgXcQ";
-    initPlayer(initialId);
-    return () => {
-      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
-      playerRef.current?.destroy();
-    };
-  }, [initPlayer, videoUrl]); // Re-run if these change, but initPlayer is stable
+  const handleConnection = useCallback((conn: DataConnection) => {
+    connRef.current = conn;
+    setStatus("connecting");
+    conn.on("open", async () => {
+      setStatus("connected");
+      // Send current state to the new peer immediately
+      if (playerRef.current) {
+        try {
+          const time = await playerRef.current.getCurrentTime();
+          const state = await playerRef.current.getPlayerState();
+          conn.send({ action: "URL_CHANGE", url: urlInput });
+          setTimeout(() => {
+            conn.send({ action: state === 1 ? "PLAY" : "PAUSE", time });
+          }, 1000); // Give player time to load on the other side
+        } catch (e) {}
+      }
+    });
+    conn.on("data", (data: any) => {
+      if (data.action === "CHAT") { setChatMessages(p => [...p, { from: "partner", text: data.text }]); return; }
+      if (data.action === "URL_CHANGE") { 
+        const id = extractVideoId(data.url); 
+        if (id) initPlayer(id); 
+        setUrlInput(data.url); 
+        return; 
+      }
+      isSyncingRef.current = true;
+      if (data.action === "PLAY") { playerRef.current?.seekTo(data.time, true); playerRef.current?.playVideo(); }
+      else if (data.action === "PAUSE") { playerRef.current?.seekTo(data.time, true); playerRef.current?.pauseVideo(); }
+      else if (data.action === "SEEK") { playerRef.current?.seekTo(data.time, true); }
+      setTimeout(() => isSyncingRef.current = false, 500);
+    });
+    conn.on("close", () => { setStatus("disconnected"); connRef.current = null; });
+  }, [initPlayer, urlInput]);
 
-  // Video loading handled in handleUrlChange and connection handler
+  const connectToPeer = useCallback((id: string) => {
+    if (!peerRef.current) return;
+    setStatus("connecting");
+    handleConnection(peerRef.current.connect(id, { reliable: true }));
+  }, [handleConnection]);
 
-
-  // ─── Initialize PeerJS ──────────────────────────────────────────
-  useEffect(() => {
-    const id = generateShortId();
-    const peer = new Peer(id, {
-      config: {
+  const initPeer = useCallback(() => {
+    if (peerRef.current) peerRef.current.destroy();
+    const peer = new Peer(generateShortId(), {
+      debug: 1, secure: true,
+      config: { 
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
           { urls: "stun:stun2.l.google.com:19302" },
-        ],
-      },
-    });
-    peerRef.current = peer;
-
-    peer.on("open", (peerId) => {
-      setMyPeerId(peerId);
-
-      // Auto-connect if ?join= param exists
-      const params = new URLSearchParams(window.location.search);
-      const joinId = params.get("join");
-      if (joinId) {
-        setPartnerId(joinId);
-        connectToPeer(joinId);
+          { urls: "stun:global.stun.twilio.com:3478" }
+        ] 
       }
     });
-
-    peer.on("connection", (conn) => {
-      handleConnection(conn);
+    peerRef.current = peer;
+    peer.on("open", id => {
+      setMyPeerId(id);
+      const joinId = new URLSearchParams(window.location.search).get("join");
+      if (joinId) { setPartnerId(joinId); connectToPeer(joinId); }
     });
+    peer.on("connection", handleConnection);
+    peer.on("error", () => setStatus("disconnected"));
+  }, [connectToPeer, handleConnection]);
 
-    peer.on("error", (err) => {
-      console.error("Peer error:", err);
-      const messages: Record<string, string> = {
-        "peer-unavailable": "Partner not found — check the ID and try again",
-        "webrtc": "WebRTC connection failed — partner may be offline",
-        "network": "Network error — check your internet connection",
-        "server-error": "Signaling server error — try again in a moment",
-        "disconnected": "Disconnected from signaling server",
-      };
-      setErrorMsg(messages[err.type] || `Connection error: ${err.type}`);
-      setStatus("disconnected");
-      setTimeout(() => setErrorMsg(""), 5000);
-    });
-
-    return () => {
-      peer.destroy();
-    };
+  useEffect(() => {
+    initPeer();
+    initPlayer(extractVideoId(urlInput) || "dQw4w9WgXcQ");
+    return () => { peerRef.current?.destroy(); if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Connection Handling ────────────────────────────────────────
-  const handleConnection = useCallback((conn: DataConnection) => {
-    connRef.current = conn;
-    setStatus("connecting");
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, activeTab]);
 
-    conn.on("open", () => {
-      setStatus("connected");
-      setErrorMsg("");
-    });
+  const handleUrlChange = () => {
+    const id = extractVideoId(urlInput);
+    if (!id) return;
+    initPlayer(id);
+    sendPacket({ action: "URL_CHANGE", time: 0, url: urlInput });
+  };
 
-    conn.on("data", (data: unknown) => {
-      const packet = data as { action: string; time?: number; url?: string; text?: string };
-
-      if (packet.action === "CHAT") {
-        setChatMessages((prev) => [
-          ...prev,
-          { from: "partner", text: packet.text || "" },
-        ]);
-        return;
-      }
-
-      if (packet.action === "URL_CHANGE" && packet.url) {
-        const videoId = extractVideoId(packet.url);
-        if (videoId) {
-          initPlayer(videoId);
-        }
-        setVideoUrl(packet.url);
-        setUrlInput(packet.url);
-        return;
-      }
-
-      // Sync player — anti-loop protection
-      isSyncingRef.current = true;
-      const player = playerRef.current;
-      if (!player) return;
-
-      const time = packet.time ?? 0;
-
-      if (packet.action === "PLAY") {
-        player.seekTo(time, true);
-        player.playVideo();
-      } else if (packet.action === "PAUSE") {
-        player.seekTo(time, true);
-        player.pauseVideo();
-      } else if (packet.action === "SEEK") {
-        player.seekTo(time, true);
-      }
-
-      // Reset sync flag after delay to avoid event loop
-      setTimeout(() => {
-        isSyncingRef.current = false;
-      }, 500);
-    });
-
-    conn.on("close", () => {
-      setStatus("disconnected");
-      connRef.current = null;
-    });
-
-    conn.on("error", (err) => {
-      console.error("Connection error:", err);
-      setStatus("disconnected");
-      setErrorMsg("Connection lost");
-      setTimeout(() => setErrorMsg(""), 5000);
-    });
-  }, []);
-
-  const connectToPeer = useCallback(
-    (targetId: string) => {
-      if (!peerRef.current) return;
-      setStatus("connecting");
-      const conn = peerRef.current.connect(targetId, { reliable: true });
-      handleConnection(conn);
-    },
-    [handleConnection]
-  );
-
-
-
-  // ─── Search YouTube ───────────────────────────────────────────
-  const searchYouTube = useCallback(async (query: string) => {
-    if (!query.trim()) return;
-    setIsSearching(true);
-    try {
-      // Note: This is a fallback since we don't have a YouTube API key.
-      // In a real app, you'd use a backend or a proper API key.
-      // For now, we'll use a search suggest API as a proof of concept
-      // or just guide the user.
-      const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${query}`);
-      // This won't work for arbitrary search.
-      // Let's just provide a nice UI for it.
-      setErrorMsg("Direct search requires a YouTube API key. Please paste a link for now, or use the 'Browse' feature below.");
-      setTimeout(() => setErrorMsg(""), 5000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
-
-  const handleUrlChange = useCallback(() => {
-    if (!urlInput.trim()) return;
-    const videoId = extractVideoId(urlInput.trim());
-    if (!videoId) {
-      setErrorMsg("Invalid YouTube URL");
-      setTimeout(() => setErrorMsg(""), 3000);
-      return;
-    }
-    
-    // Direct player re-init
-    initPlayer(videoId);
-
-    setVideoUrl(urlInput.trim());
-    sendPacket({ action: "URL_CHANGE", time: 0, url: urlInput.trim() });
-  }, [urlInput, sendPacket, initPlayer]);
-
-  // ─── Chat ──────────────────────────────────────────────────────
-  const sendChatMessage = useCallback(() => {
+  const sendChat = () => {
     if (!chatInput.trim() || !connRef.current?.open) return;
-    connRef.current.send({ action: "CHAT", text: chatInput.trim() });
-    setChatMessages((prev) => [
-      ...prev,
-      { from: "me", text: chatInput.trim() },
-    ]);
+    connRef.current.send({ action: "CHAT", text: chatInput });
+    setChatMessages(p => [...p, { from: "me", text: chatInput }]);
     setChatInput("");
-  }, [chatInput]);
+  };
 
-  // ─── Copy Helpers ──────────────────────────────────────────────
-  const copyPeerId = useCallback(() => {
-    navigator.clipboard.writeText(myPeerId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [myPeerId]);
-
-  const copyInviteLink = useCallback(() => {
-    const link = `${window.location.origin}${window.location.pathname}?join=${myPeerId}`;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  }, [myPeerId]);
-
-  // ─── Status Badge ──────────────────────────────────────────────
-  const statusConfig = useMemo(() => {
-    switch (status) {
-      case "connected":
-        return { color: "bg-success", text: "Connected", textColor: "text-success" };
-      case "connecting":
-        return { color: "bg-warning", text: "Connecting…", textColor: "text-warning" };
-      default:
-        return { color: "bg-danger", text: "Disconnected", textColor: "text-danger" };
-    }
-  }, [status]);
-
-  // ─── Render ────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col min-h-screen">
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="glass-card mx-3 mt-3 sm:mx-4 sm:mt-4 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between animate-fade-in-up">
-        <div className="flex items-center gap-3">
-          <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center glow-accent">
-            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent to-accent-secondary bg-clip-text text-transparent">
-              SyncParty
-            </h1>
-            <p className="text-[10px] sm:text-xs text-muted hidden sm:block">
-              Peer-to-peer watch party
-            </p>
-          </div>
+    <div className="flex flex-col h-[100dvh] bg-black text-white font-sans overflow-hidden select-none">
+      <header className="h-16 lg:h-20 px-6 lg:px-12 flex items-center justify-between fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/90 to-transparent">
+        <div className="flex items-center gap-4 lg:gap-10">
+          <h1 className="text-2xl lg:text-3xl font-black text-red-600 tracking-tighter uppercase italic cursor-pointer hover:scale-105 transition-transform">synclcod</h1>
+          {!isMobile && (
+            <nav className="flex gap-6 text-sm font-bold text-zinc-400">
+              <span className="hover:text-white transition-colors cursor-pointer">Live Party</span>
+              <span className="hover:text-white transition-colors cursor-pointer">History</span>
+            </nav>
+          )}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full glass-card ${statusConfig.textColor}`}>
-            <div className={`w-2 h-2 rounded-full ${statusConfig.color} ${status === "connecting" ? "status-pulse" : ""}`} />
-            <span className="text-xs font-medium">{statusConfig.text}</span>
+        <div className="flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-3 bg-zinc-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
+            <div className={`w-2 h-2 rounded-full ${status==='connected' ? 'bg-green-500 animate-pulse' : 'bg-zinc-700'}`} />
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{status}</span>
           </div>
+          {!isMobile && (
+            <button onClick={()=>setShowChat(!showChat)} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+              <ChatIcon active={showChat} />
+            </button>
+          )}
         </div>
       </header>
 
-      {/* ── Error Banner ────────────────────────────────────────── */}
-      {errorMsg && (
-        <div className="mx-3 mt-2 sm:mx-4 px-4 py-2 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm text-center animate-fade-in-up">
-          {errorMsg}
-        </div>
-      )}
-
-      {/* ── Main Content ────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 p-3 sm:p-4 animate-fade-in-up">
-        {/* Left Column — Video + URL */}
-        <div className="flex-1 flex flex-col gap-3 sm:gap-4 min-w-0">
-          {/* YouTube Player */}
-          <div className="glass-card p-2 sm:p-3 glow-accent-hover transition-shadow duration-500">
-            <div
-              className="relative w-full rounded-lg overflow-hidden bg-black"
-              style={{ aspectRatio: "16/9" }}
-            >
-              <div
-                ref={playerContainerRef}
-                id="youtube-player"
-                className="absolute inset-0 w-full h-full"
-              />
-            </div>
-          </div>
-
-          {/* URL Input */}
-          <div className="glass-card p-3 sm:p-4">
-            <label className="text-xs text-muted-light font-medium uppercase tracking-wider mb-2 block">
-              Video URL
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="video-url-input"
-                type="url"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleUrlChange()}
-                placeholder="Paste a YouTube URL…"
-                className="flex-1 bg-background/50 border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted transition-all duration-200 hover:border-accent/30 focus:border-accent/50 min-w-0"
-              />
-              <button
-                id="load-video-btn"
-                onClick={handleUrlChange}
-                className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-accent to-accent-secondary rounded-xl text-white text-sm font-semibold transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] shrink-0 cursor-pointer"
-              >
-                Load
-              </button>
-            </div>
-            <div className="mt-4 flex gap-2">
-               <button
-                onClick={() => window.open('https://www.youtube.com', '_blank')}
-                className="flex-1 px-4 py-2 bg-background/50 border border-card-border rounded-xl text-xs text-muted-light hover:text-foreground transition-colors flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
-                Browse on YouTube.com
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column — Connection + Chat */}
-        <div className="lg:w-[380px] xl:w-[420px] flex flex-col gap-3 sm:gap-4 shrink-0">
-          {/* Your ID Card */}
-          <div className="glass-card p-4 sm:p-5">
-            <label className="text-xs text-muted-light font-medium uppercase tracking-wider mb-3 block">
-              Your Peer ID
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-background/50 border border-card-border rounded-xl px-4 py-2.5 font-mono text-sm text-accent select-all truncate">
-                {myPeerId || <span className="shimmer inline-block w-24 h-4 rounded" />}
-              </div>
-              <button
-                id="copy-peer-id-btn"
-                onClick={copyPeerId}
-                disabled={!myPeerId}
-                className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 text-accent transition-all duration-200 hover:bg-accent/20 hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
-                title="Copy Peer ID"
-              >
-                <CopyIcon copied={copied} />
-              </button>
-              <button
-                id="copy-invite-link-btn"
-                onClick={copyInviteLink}
-                disabled={!myPeerId}
-                className="p-2.5 rounded-xl bg-accent-secondary/10 border border-accent-secondary/20 text-accent-secondary transition-all duration-200 hover:bg-accent-secondary/20 hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
-                title="Copy Invite Link"
-              >
-                {copiedLink ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <LinkIcon />
-                )}
-              </button>
-            </div>
-            {(copied || copiedLink) && (
-              <p className="text-xs text-success mt-2 animate-fade-in-up">
-                {copied ? "Peer ID copied!" : "Invite link copied!"}
-              </p>
-            )}
-          </div>
-
-          {/* Connect Card */}
-          <div className="glass-card p-4 sm:p-5">
-            <label className="text-xs text-muted-light font-medium uppercase tracking-wider mb-3 block">
-              Connect to Partner
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="partner-id-input"
-                type="text"
-                value={partnerId}
-                onChange={(e) => setPartnerId(e.target.value.toUpperCase())}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && partnerId && connectToPeer(partnerId)
-                }
-                placeholder="Enter partner ID…"
-                className="flex-1 bg-background/50 border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted font-mono transition-all duration-200 hover:border-accent/30 focus:border-accent/50 min-w-0"
-              />
-              <button
-                id="connect-btn"
-                onClick={() => connectToPeer(partnerId)}
-                disabled={!partnerId || status === "connected"}
-                className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-accent to-purple-500 rounded-xl text-white text-sm font-semibold transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:scale-100 shrink-0 cursor-pointer"
-              >
-                {status === "connecting" ? (
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    …
-                  </span>
-                ) : (
-                  "Connect"
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Chat */}
-          <div className="glass-card flex-1 flex flex-col p-4 sm:p-5 min-h-[200px] lg:min-h-0">
-            <label className="text-xs text-muted-light font-medium uppercase tracking-wider mb-3 block">
-              Chat
-            </label>
-
-            <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1 max-h-[300px] lg:max-h-none">
-              {chatMessages.length === 0 && (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-xs text-muted italic">
-                    {status === "connected"
-                      ? "Say hi to your partner! 👋"
-                      : "Connect to start chatting"}
-                  </p>
+      <main className={`flex-1 flex flex-col lg:flex-row overflow-hidden relative ${!isMobile ? 'pt-20' : ''}`}>
+        <div className="flex-1 flex flex-col items-center justify-center p-4 lg:p-8 overflow-hidden transition-all duration-500">
+          <div className={`w-full max-w-5xl transition-all duration-500 ease-in-out ${showChat && !isMobile ? 'lg:max-w-4xl' : 'lg:max-w-6xl'}`}>
+            <div className="aspect-video bg-black rounded-xl lg:rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)] border border-white/5 relative group">
+              <div ref={playerContainerRef} className="w-full h-full" />
+              {!isMobile && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none flex items-end p-8">
+                  <div className="w-full flex gap-4 pointer-events-auto animate-fade-in">
+                    <input value={urlInput} onChange={e=>setUrlInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleUrlChange()} placeholder="YouTube Link..." className="flex-1 bg-black/40 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-2xl outline-none focus:border-red-600/50 transition-all text-sm" />
+                    <button onClick={handleUrlChange} className="px-10 bg-red-600 hover:bg-red-700 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-600/20 active:scale-95 transition-all">Load</button>
+                  </div>
                 </div>
               )}
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.from === "me" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-                      msg.from === "me"
-                        ? "bg-accent/20 text-accent rounded-br-md"
-                        : "bg-card border border-card-border text-foreground rounded-bl-md"
-                    }`}
-                  >
-                    {msg.text}
+            </div>
+            {!isMobile && (
+              <div className="mt-8 flex justify-between items-center px-4 animate-fade-in">
+                <div className="space-y-1">
+                  <h2 className="text-3xl font-black uppercase tracking-tighter">THE CINEMA</h2>
+                  <div className="flex items-center gap-4 text-xs font-bold text-zinc-500">
+                    <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-600" /> SYNCED</span>
+                    <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-zinc-700" /> P2P</span>
                   </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="bg-zinc-900/40 backdrop-blur-md border border-white/5 px-6 py-3 rounded-2xl flex items-center gap-4">
+                    <div className="flex flex-col text-left">
+                      <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">My ID</span>
+                      <span className="font-mono text-sm font-bold text-zinc-300">{myPeerId || "..."}</span>
+                    </div>
+                    <button onClick={()=>{navigator.clipboard.writeText(myPeerId); setCopied(true); setTimeout(()=>setCopied(false), 2000);}} className="text-red-600 hover:scale-110 transition-transform"><CopyIcon copied={copied}/></button>
+                  </div>
+                  <div className="flex bg-zinc-900/40 backdrop-blur-md border border-white/5 p-1 rounded-2xl">
+                    <input value={partnerId} onChange={e=>setPartnerId(e.target.value.toUpperCase())} placeholder="Partner ID" className="w-32 bg-transparent px-4 py-2 text-xs font-mono outline-none" />
+                    <button onClick={()=>connectToPeer(partnerId)} className="px-6 bg-red-600 rounded-xl font-black uppercase text-[10px] tracking-widest">Connect</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {!isMobile && showChat && (
+          <aside className="w-[450px] bg-[#0A0A0A] border-l border-white/5 flex flex-col animate-slide-left shadow-2xl relative z-10">
+            <div className="p-8 flex justify-between items-center border-b border-white/5">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Audience Chat</span>
+              <button onClick={()=>setShowChat(false)} className="text-zinc-600 hover:text-white transition-colors">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
+              {chatMessages.length === 0 && <div className="h-full flex items-center justify-center text-zinc-800 text-xs italic uppercase tracking-widest">Quiet in the theater...</div>}
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] px-5 py-3.5 rounded-2xl text-[13px] shadow-2xl leading-relaxed ${m.from==='me' ? 'bg-red-600 text-white rounded-tr-none' : 'bg-zinc-900 text-zinc-400 rounded-tl-none border border-white/5'}`}>{m.text}</div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
-
-            <div className="flex gap-2">
-              <input
-                id="chat-input"
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
-                placeholder={
-                  status === "connected" ? "Type a message…" : "Connect first…"
-                }
-                disabled={status !== "connected"}
-                className="flex-1 bg-background/50 border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted transition-all duration-200 hover:border-accent/30 focus:border-accent/50 disabled:opacity-40 min-w-0"
-              />
-              <button
-                id="send-chat-btn"
-                onClick={sendChatMessage}
-                disabled={status !== "connected" || !chatInput.trim()}
-                className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 text-accent transition-all duration-200 hover:bg-accent/20 hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              </button>
+            <div className="p-8 bg-black/50 backdrop-blur-xl">
+              <div className="flex gap-3 bg-[#121212] p-2 rounded-2xl border border-white/5 shadow-2xl">
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendChat()} placeholder="Send a reaction..." className="flex-1 bg-transparent px-4 text-sm outline-none" />
+                <button onClick={sendChat} className="w-12 h-12 flex items-center justify-center bg-red-600 rounded-xl text-white shadow-lg shadow-red-600/20"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+              </div>
             </div>
-          </div>
-        </div>
-      </main>
+          </aside>
+        )}
 
-      {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="text-center py-3 text-xs text-muted">
-        <p>
-          P2P powered by <span className="text-accent font-medium">PeerJS</span> — No server, just vibes ✨
-        </p>
-      </footer>
+        {isMobile && (
+          <div className="flex-1 overflow-y-auto scrollbar-hide pb-28">
+            {activeTab === "watch" && (
+              <div className="p-6 space-y-8 animate-fade-in">
+                <div className="space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-600 ml-1">Streaming Source</p>
+                  <div className="relative">
+                    <input value={urlInput} onChange={e=>setUrlInput(e.target.value)} placeholder="YouTube URL" className="w-full bg-[#121212] border border-white/5 rounded-3xl px-6 py-5 text-sm outline-none focus:ring-4 ring-red-600/10 transition-all shadow-2xl" />
+                    <button onClick={handleUrlChange} className="absolute right-2 top-2 bottom-2 px-8 bg-red-600 rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-red-600/30">Load</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-8 bg-gradient-to-br from-[#1A1A1A] to-[#121212] rounded-[2rem] border border-white/5 flex flex-col items-center gap-4 shadow-2xl active:scale-95 transition-transform" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/?join=${myPeerId}`); setCopied(true); setTimeout(()=>setCopied(false), 2000);}}>
+                    <div className="w-14 h-14 bg-red-600/10 rounded-full flex items-center justify-center text-red-600 shadow-inner"><PartyIcon active={true}/></div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{copied ? "COPIED" : "INVITE"}</span>
+                  </div>
+                  <div className="p-8 bg-gradient-to-br from-[#1A1A1A] to-[#121212] rounded-[2rem] border border-white/5 flex flex-col items-center gap-4 shadow-2xl active:scale-95 transition-transform" onClick={()=>window.open('https://youtube.com', '_blank')}>
+                    <div className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-500 shadow-inner"><WatchIcon active={true}/></div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">BROWSE</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeTab === "chat" && (
+              <div className="h-full flex flex-col p-6 animate-fade-in">
+                 <div className="flex-1 space-y-5 mb-4">
+                    {chatMessages.map((m, i) => (
+                      <div key={i} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] px-6 py-4 rounded-[2rem] text-[15px] shadow-2xl ${m.from==='me' ? 'bg-red-600 text-white shadow-red-600/20' : 'bg-[#1A1A1A] text-zinc-300 border border-white/5'}`}>{m.text}</div>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                 </div>
+                 <div className="flex gap-2 sticky bottom-4 bg-zinc-900/90 backdrop-blur-3xl p-2 rounded-[2.5rem] border border-white/10 shadow-2xl">
+                    <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendChat()} placeholder="Chat..." className="flex-1 bg-transparent px-6 text-base outline-none" />
+                    <button onClick={sendChat} className="w-14 h-14 flex items-center justify-center bg-red-600 text-white rounded-full shadow-2xl shadow-red-600/40 active:scale-90 transition-transform">
+                      <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                 </div>
+              </div>
+            )}
+            {activeTab === "party" && (
+              <div className="p-6 space-y-6 animate-fade-in">
+                <div className="bg-gradient-to-br from-[#1A1A1A] to-[#0A0A0A] rounded-[3rem] p-12 border border-white/5 shadow-2xl flex flex-col items-center text-center gap-8">
+                  <div className="w-28 h-28 bg-red-600/10 rounded-full flex items-center justify-center text-red-600 shadow-[0_0_80px_rgba(229,9,20,0.15)] ring-1 ring-red-600/20">
+                    <PartyIcon active={true}/>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-black text-zinc-600 uppercase tracking-widest">My Streaming ID</p>
+                    <h3 className="text-5xl font-black tracking-tighter text-white">{myPeerId || "..."}</h3>
+                  </div>
+                  <button onClick={()=>{navigator.clipboard.writeText(myPeerId); setCopied(true); setTimeout(()=>setCopied(false), 2000);}} className="w-full py-5 bg-white text-black font-black text-sm uppercase rounded-[1.5rem] shadow-2xl active:scale-95 transition-all">Copy Connection ID</button>
+                </div>
+                <div className="bg-[#121212] rounded-[3rem] p-10 border border-white/5 space-y-8 shadow-2xl">
+                   <div className="space-y-4">
+                     <p className="text-[11px] font-black text-zinc-600 uppercase tracking-widest text-center">Join Partner</p>
+                     <input value={partnerId} onChange={e=>setPartnerId(e.target.value.toUpperCase())} placeholder="NET-XXXXXX" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-6 text-center font-mono text-2xl tracking-[0.3em] outline-none focus:border-red-600/40 transition-all text-red-600" />
+                   </div>
+                   <button onClick={()=>connectToPeer(partnerId)} className="w-full py-6 bg-red-600 text-white rounded-2xl font-black uppercase text-sm tracking-[0.3em] shadow-2xl shadow-red-600/30 active:scale-95 transition-all">Connect</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isMobile && (
+          <nav className="h-[95px] bg-black/80 backdrop-blur-3xl border-t border-white/5 flex items-center justify-around fixed bottom-0 left-0 right-0 z-50 px-10 pb-6 shadow-[0_-20px_50px_rgba(0,0,0,0.9)]">
+            <button onClick={()=>setActiveTab("watch")} className="flex flex-col items-center gap-1.5 group">
+              <WatchIcon active={activeTab === "watch"} />
+              <span className={`text-[10px] font-black uppercase tracking-tighter transition-colors ${activeTab === 'watch' ? 'text-white' : 'text-zinc-600'}`}>Watch</span>
+            </button>
+            <button onClick={()=>setActiveTab("chat")} className="flex flex-col items-center gap-1.5 group">
+              <ChatIcon active={activeTab === "chat"} />
+              <span className={`text-[10px] font-black uppercase tracking-tighter transition-colors ${activeTab === 'chat' ? 'text-white' : 'text-zinc-600'}`}>Chat</span>
+            </button>
+            <button onClick={()=>setActiveTab("party")} className="flex flex-col items-center gap-1.5 group">
+              <PartyIcon active={activeTab === "party"} />
+              <span className={`text-[10px] font-black uppercase tracking-tighter transition-colors ${activeTab === 'party' ? 'text-white' : 'text-zinc-600'}`}>Party</span>
+            </button>
+          </nav>
+        )}
+      </main>
     </div>
   );
 }
