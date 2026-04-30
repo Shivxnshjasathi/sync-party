@@ -127,6 +127,12 @@ export default function WatchParty() {
       playerVars: { autoplay: 1, modestbranding: 1, rel: 0, controls: 1, enablejsapi: 1, origin: typeof window !== 'undefined' ? window.location.origin : '' },
     });
     playerRef.current = player;
+    
+    // Force play as soon as it's ready
+    player.on("ready", () => {
+      player.playVideo().catch(() => {});
+    });
+
     player.on("stateChange", (event: { data: number }) => {
       if (isSyncingRef.current) return;
       if (event.data === 1 || event.data === 2) {
@@ -147,10 +153,15 @@ export default function WatchParty() {
   const handleConnection = useCallback((conn: DataConnection) => {
     connRef.current = conn;
     setStatus("connecting");
-    conn.on("open", async () => {
+
+    const onOpen = () => {
       setStatus("connected");
       conn.send({ action: "URL_CHANGE", url: urlInput });
-    });
+    };
+
+    if (conn.open) onOpen();
+    else conn.on("open", onOpen);
+
     conn.on("data", (data: any) => {
       if (data.action === "CHAT") { setChatMessages(p => [...p, { from: "partner", text: data.text }]); return; }
       if (data.action === "COUNTDOWN") { startCountdown(false); return; }
@@ -220,7 +231,12 @@ export default function WatchParty() {
     const finalUrl = forcedUrl || urlInput;
     const s = getSource(finalUrl);
     setSource(s);
-    if (s === "youtube") { const id = extractVideoId(finalUrl); if (id) initPlayer(id); }
+    if (s === "youtube") {
+      const id = extractVideoId(finalUrl);
+      if (id) {
+        initPlayer(id);
+      }
+    }
     setUrlInput(finalUrl);
     sendPacket({ action: "URL_CHANGE", time: 0, url: finalUrl });
   };
@@ -257,10 +273,10 @@ export default function WatchParty() {
             {source === "youtube" ? (
               <div ref={playerContainerRef} className="w-full h-full" />
             ) : source === "netflix" ? (
-              <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center space-y-6 bg-zinc-900/20">
-                <div className="text-red-600 font-black text-4xl">NETFLIX</div>
-                <div className="space-y-4">
-                  <p className="text-xs text-zinc-500 max-w-xs mx-auto uppercase tracking-widest font-bold">Bridge Sync Mode</p>
+              <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-zinc-900/10">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="text-red-600 font-black text-4xl italic tracking-tighter uppercase">NETFLIX</div>
+                  <div className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.4em] animate-pulse">Coming Soon</div>
                   <div className="flex gap-2 justify-center">
                     <button onClick={() => window.open(urlInput, '_blank')} className="px-6 py-3 bg-white text-black text-[10px] font-black uppercase rounded">Launch</button>
                     <button onClick={() => startCountdown()} className="px-6 py-3 bg-red-600 text-white text-[10px] font-black uppercase rounded">Sync</button>
