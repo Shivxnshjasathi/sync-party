@@ -1,148 +1,43 @@
 @import "tailwindcss";
 
-@theme {
-  --color-background: #050508;
-  --color-foreground: #f8fafc;
-  --color-card: #0f111a;
-  --color-card-border: rgba(255, 255, 255, 0.08);
-  --color-accent: #3b82f6;
-  --color-accent-secondary: #8b5cf6;
-  --color-muted: #64748b;
-  --color-muted-light: #94a3b8;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-}
-
 @layer base {
-
-  html,
   body {
-    background: var(--color-background);
-    color: var(--color-foreground);
+    background: #000;
+    color: #fff;
     overflow: hidden;
-    /* Prevent body scroll for native app feel */
     height: 100dvh;
     width: 100vw;
     position: fixed;
-    /* Extra protection against mobile rubber-banding */
+    -webkit-font-smoothing: antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
 
   * {
     -webkit-tap-highlight-color: transparent;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
 @layer components {
-  .glass-card {
-    background: rgba(15, 17, 26, 0.7);
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--color-card-border);
-    border-radius: 1.5rem;
+  .animate-fade-in {
+    animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  @keyframes slide-left {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+  .animate-slide-up {
+    animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  .animate-slide-left {
-    animation: slide-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-@layer components {
-  .text-glow {
-    text-shadow: 0 0 15px rgba(229, 9, 20, 0.5);
-  }
-  .box-glow {
-    box-shadow: 0 0 30px rgba(229, 9, 20, 0.2);
-  }
-}
-
-/* Custom transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 350ms;
-}
-
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #000;
-}
-
-  .scroll-custom::-webkit-scrollbar {
-    width: 4px;
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  .scroll-custom::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scroll-custom::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes shake {
-
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-4px);
-  }
-
-  75% {
-    transform: translateX(4px);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-shake {
-  animation: shake 0.3s ease-in-out;
-}
-
-.glow-accent {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-
-.status-pulse {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.5;
-    transform: scale(1.1);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
